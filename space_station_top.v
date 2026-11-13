@@ -206,4 +206,18 @@ module space_station_top (
         .dp(dp)
     );
 
+    loop_memory u_loop_memory (
+    .clk(clk),
+    .rst(rst),
+    .memory_clear(memory_clear),
+    .failure_save(failure_save),
+    .failure_code(saved_failure_code),
+    .time_step(time_step),
+    .loop_count(loop_count),
+    .last_failure_code(),
+    .last_failure_time(),
+    .last_failure_loop(),
+    .failure_count()
+);
+
 endmodule
