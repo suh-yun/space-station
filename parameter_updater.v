@@ -1,32 +1,36 @@
 module parameter_updater (
     input  wire        clk,
     input  wire        rst_n,
-    input  wire        sim_done,     // ½Ã¹Ä·¹ÀÌ¼Ç Á¾·á ½ÅÈ£
-    input  wire        sim_fail,     // ½ÇÆĞ ¹ß»ı ¿©ºÎ ½ÅÈ£
-    input  wire [2:0]  failure_code, // ½ÇÆĞ ¿øÀÎ ÄÚµå (1:Áú½Ä, 2:°ú¿­, 3:Á¤Àü)
-    output reg  [3:0]  o_ref,        // °»½ÅµÈ ¸ñÇ¥ »ê¼Ò·®
-    output reg  [3:0]  h_safe,       // °»½ÅµÈ ³Ã°¢ ±âÁØ ¿Âµµ
-    output reg  [4:0]  p_safe        // °»½ÅµÈ ¾ÈÀü Àü·Â ±âÁØ
+    input  wire        sim_done,     // ì‹œë®¬ë ˆì´ì…˜ ì¢…ë£Œ ì‹ í˜¸
+    input  wire        sim_fail,     // ì‹¤íŒ¨ ë°œìƒ ì—¬ë¶€ ì‹ í˜¸
+    input  wire [2:0]  failure_code, // ì‹¤íŒ¨ ì›ì¸ ì½”ë“œ (1:ì§ˆì‹, 2:ê³¼ì—´, 3:ì •ì „)
+    output reg  [3:0]  o_ref,        // ê°±ì‹ ëœ ëª©í‘œ ì‚°ì†ŒëŸ‰
+    output reg  [3:0]  h_safe,       // ê°±ì‹ ëœ ëƒ‰ê° ê¸°ì¤€ ì˜¨ë„
+    output reg  [4:0]  p_safe        // ê°±ì‹ ëœ ì•ˆì „ ì „ë ¥ ê¸°ì¤€
 );
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            // ÃÊ±â ±âº» ±âÁØ°ª ¼³Á¤
+            // ì´ˆê¸° ê¸°ë³¸ ê¸°ì¤€ê°’ ì„¤ì •
             o_ref  <= 4'd8;
             h_safe <= 4'd8;
             p_safe <= 5'd5;
         end else if (sim_done && sim_fail) begin
-            // ½ÇÆĞ ¿øÀÎ¿¡ µû¸¥ ÀûÀÀÇü ÆÄ¶ó¹ÌÅÍ º¸Á¤ (Outer Loop Rule)
+            // ì‹¤íŒ¨ ì›ì¸ì— ë”°ë¥¸ ì ì‘í˜• íŒŒë¼ë¯¸í„° ë³´ì • (Outer Loop Rule)
+            
             case (failure_code)
-                3'd1: begin // Áú½Ä ¹ß»ı -> ¸ñÇ¥ »ê¼Ò·® »óÇâ (ÃÖ´ë 15)
-                    if (o_ref < 4'd15) o_ref <= o_ref + 1'b1;
-                end
-                3'd2: begin // °ú¿­ ¹ß»ı -> ³Ã°¢ ±âÁØ ¿Âµµ ÇÏÇâ (ÃÖ¼Ò 1)
-                    if (h_safe > 4'd1) h_safe <= h_safe - 1'b1;
-                end
-                3'd3: begin // Á¤Àü ¹ß»ı -> ¾ÈÀü Àü·Â ±âÁØ »óÇâ
-                    p_safe <= p_safe + 1'b1;
-                end
+                3'd1: begin // ì§ˆì‹ ë°œìƒ (FAIL_SUFFOCATION) -> ëª©í‘œ ì‚°ì†ŒëŸ‰ ìƒí–¥
+                        if (o_ref < 4'd15) o_ref <= o_ref + 1'b1;
+                      end
+                3'd2: begin // ì •ì „ ë°œìƒ (FAIL_BLACKOUT) -> ì•ˆì „ ì „ë ¥ ê¸°ì¤€ ìƒí–¥
+                         p_safe <= p_safe + 1'b1;
+                      end
+                3'd3: begin // ê³¼ì—´ ë°œìƒ (FAIL_OVERHEAT) -> ëƒ‰ê° ê¸°ì¤€ ì˜¨ë„ í•˜í–¥
+                        if (h_safe > 4'd1) h_safe <= h_safe - 1'b1;
+                      end
+                3'd4: begin // ê³ ë¦½ ë°œìƒ (FAIL_ISOLATION) -> ëŒ€í”¼ ì„ê³„ê°’ ì¡°ì • ë“± í•„ìš” ì‹œ ì¶”ê°€
+                       if (evac_threshold < 4'd15) evac_threshold <= evac_threshold + 1'b1;
+                      end
                 default: ;
             endcase
         end
