@@ -1,4 +1,4 @@
-목표 산소량과 현재 산소량의 오차를 계산하여 산소 공급량을 결정
+// 목표 산소량과 현재 산소량의 오차를 계산하여 산소 공급량을 결정
 
 module oxygen_controller (
     input  wire [3:0] o_ref,       // 목표 산소량 (Outer Loop에서 전달)
@@ -19,3 +19,4 @@ module oxygen_controller (
         end
     end
 endmodule
+

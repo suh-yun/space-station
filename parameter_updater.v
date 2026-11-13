@@ -14,8 +14,8 @@ module parameter_updater (
             o_ref <= 4'd8;
             h_safe <= 4'd8;
             p_safe <= 5'd5;
-            // 4 is too late for an eight-step evacuation in many scenarios.
-            evac_threshold <= 4'd8;
+            // Start evacuation early enough to move crew1 out of A.
+            evac_threshold <= 4'd10;
         end else if (failure_save) begin
             case (failure_code)
                 3'd1: if (o_ref < 4'd15) o_ref <= o_ref + 1'b1;
@@ -28,3 +28,4 @@ module parameter_updater (
         end
     end
 endmodule
+

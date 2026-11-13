@@ -10,6 +10,9 @@ module supervisory_fsm (
     output reg door_ab_cmd, door_bc_cmd,
     output reg [2:0] phase
 );
+    // Commands are executed in APPLY, while phase advances in CHECK.
+    // power guards cover base+actuation only; full energy budgeting
+    // (oxygen/cooling) belongs in c_expected for power_controller.
     localparam A = 2'd0, B = 2'd1, C = 2'd2;
     localparam MONITOR=3'd0, OPEN_AB=3'd1, EVAC_A=3'd2,
                TRANSFER=3'd3, EVAC_B=3'd4, SAFE=3'd5;
@@ -90,3 +93,4 @@ module supervisory_fsm (
         else if (supervisor_commit) phase <= next_phase;
     end
 endmodule
+

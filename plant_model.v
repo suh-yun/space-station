@@ -52,6 +52,13 @@ module plant_model (
     reg signed [2:0] flow_AB, flow_BC;
     reg [4:0] total_power_cons;
     reg [4:0] power_gen;
+    // Only charge movement power if the corresponding passage is open.
+    wire crew1_can_move =
+        move_crew1 && ((crew1_pos == ZONE_A && door_AB) ||
+                       (crew1_pos == ZONE_B && door_BC));
+    wire crew2_can_move =
+        move_crew2 && ((crew2_pos == ZONE_A && door_AB) ||
+                       (crew2_pos == ZONE_B && door_BC));
 
     always @(*) begin
         // 1. 각 구역별 승무원 산소 소비량 (1명이 1만큼 소비
@@ -85,8 +92,8 @@ module plant_model (
         // 4. 총 전력 소비량 계산
         // 기본(1) + 이동(각 2) + 산소공급(2, 작동 시) + 냉각(2) + 격벽작동(상태 변경 시 각 1)
         total_power_cons = base_load 
-                         + (move_crew1 ? 5'd2 : 5'd0)
-                         + (move_crew2 ? 5'd2 : 5'd0)
+                         + (crew1_can_move ? 5'd2 : 5'd0)
+                         + (crew2_can_move ? 5'd2 : 5'd0)
                          + ((oxygen_cmd != 2'd0) ? 5'd2 : 5'd0)
                          + (cooling_cmd ? 5'd2 : 5'd0)
                          + ((door_ab_cmd != door_AB) ? 5'd1 : 5'd0)
@@ -132,13 +139,13 @@ module plant_model (
             door_BC <= door_bc_cmd;
 
             // 승무원 1 이동 초기화 (A -> B -> C)
-            if (move_crew1) begin
+            if (crew1_can_move) begin
                 if (crew1_pos == ZONE_A && door_AB)      crew1_pos <= ZONE_B;
                 else if (crew1_pos == ZONE_B && door_BC) crew1_pos <= ZONE_C;
             end
 
             // 승무원 2 이동 초기화 (A -> B -> C)
-            if (move_crew2) begin
+            if (crew2_can_move) begin
                 if (crew2_pos == ZONE_A && door_AB)      crew2_pos <= ZONE_B;
                 else if (crew2_pos == ZONE_B && door_BC) crew2_pos <= ZONE_C;
             end
@@ -146,3 +153,4 @@ module plant_model (
     end
 
 endmodule
+
