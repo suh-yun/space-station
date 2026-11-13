@@ -14,7 +14,7 @@ module time_fsm #(
     input wire is_success,
     input wire [2:0] fail_code,
 
-    // 현재 시뮬레이션 시간과 루프 번호
+    // 현재 시뮬레이션 시간 및 루프 번호
     output reg [2:0] time_step,
     output reg [3:0] loop_count,
 
@@ -25,7 +25,7 @@ module time_fsm #(
     output wire failure_save,
     output wire memory_clear,
 
-    // Loop Memory로 전달할 실패 코드
+    // Loop Memory와 Parameter Updater에 전달할 실패 코드
     output wire [2:0] saved_failure_code,
 
     // 전체 진행 상태
@@ -34,7 +34,7 @@ module time_fsm #(
     output wire success
 );
 
-    // FSM 상태 정의
+    // Time FSM 상태 정의
     localparam IDLE      = 3'd0,
                RESTART   = 3'd1,
                WAIT_TICK = 3'd2,
@@ -44,50 +44,59 @@ module time_fsm #(
                ADVANCE   = 3'd6,
                FINISH    = 3'd7;
 
+    // 실패 코드 정의
+    localparam FAIL_SUFFOCATION = 3'b001,
+               FAIL_BLACKOUT    = 3'b010,
+               FAIL_OVERHEAT    = 3'b011,
+               FAIL_ISOLATION   = 3'b100,
+               FAIL_INVALID     = 3'b111;
+
     // 현재 FSM 상태
     reg [2:0] state;
 
-    // 최종 성공 여부를 저장하는 레지스터
+    // 최종 성공 여부 저장
     reg terminal_success;
 
-    // CHECK에서 확인한 실패 코드를 저장
+    // CHECK 상태에서 확정한 실패 코드 저장
     reg [2:0] pending_fail_code;
 
     // Plant Model은 APPLY 상태에서만 갱신
     assign plant_step = (state == APPLY);
 
-    // Supervisory FSM은 Plant 갱신 후 CHECK에서 전이
-    assign supervisor_commit = (state == CHECK);
+    // Plant 갱신 후 CHECK에서 Supervisory FSM 상태 전이
+    // 실패가 발생한 경우에는 상태 전이하지 않음
+    assign supervisor_commit =
+        (state == CHECK) && !is_failed && !is_success;
 
-    // 새로운 루프가 시작될 때 Plant 상태 초기화
+    // 새로운 루프 시작 시 Plant와 Supervisory FSM 초기화
     assign loop_reset = (state == RESTART);
 
-    // SAVE 상태에서 이전 루프의 실패 정보 저장
+    // SAVE 상태에서 실패 정보 저장 및 파라미터 갱신
     assign failure_save = (state == SAVE);
 
     // 첫 번째 루프 시작 시 이전 실행의 실패 기록 삭제
     assign memory_clear =
         (state == RESTART && loop_count == 4'd1);
 
-    // CHECK에서 저장한 실패 코드를 Memory로 전달
+    // CHECK에서 저장한 실패 코드 전달
     assign saved_failure_code = pending_fail_code;
 
-    // 현재 진행 여부
+    // 전체 시뮬레이션 진행 여부
     assign running =
         (state != IDLE && state != FINISH);
 
-    // 종료 여부
+    // 전체 시뮬레이션 종료 여부
     assign done = (state == FINISH);
 
-    // 성공적으로 종료했는지 표시
+    // 최종 성공 여부
     assign success =
         (state == FINISH) && terminal_success;
 
-    // FSM 상태 전이 및 시간 관리
+    // Time FSM 상태 전이 및 시간 관리
     always @(posedge clk) begin
 
         if (rst) begin
-            // 전체 시스템 초기화
+            // 전체 시스템 Reset
             state <= IDLE;
             time_step <= 3'd0;
             loop_count <= 4'd0;
@@ -98,8 +107,8 @@ module time_fsm #(
         else begin
             case (state)
 
+                // 1. 시뮬레이션 시작 대기
                 IDLE: begin
-                    // START 입력 시 첫 번째 루프 시작
                     if (start) begin
                         loop_count <= 4'd1;
                         time_step <= 3'd0;
@@ -109,47 +118,66 @@ module time_fsm #(
                     end
                 end
 
+                // 2. 새로운 루프 시작
                 RESTART: begin
-                    // Plant와 Supervisory FSM 초기화 후 대기
+                    // loop_reset이 1인 동안
+                    // Plant와 Supervisory FSM 초기화
                     state <= WAIT_TICK;
                 end
 
+                // 3. 다음 시간 단계 진행 신호 대기
                 WAIT_TICK: begin
-                    // 다음 시간 진행 신호가 올 때까지 대기
                     if (tick)
                         state <= APPLY;
                 end
 
+                // 4. Plant Model 갱신
                 APPLY: begin
-                    // 이 상태에서 Plant Model이 갱신됨
-                    // 다음 클록에서 CHECK 상태로 이동
+                    // plant_step = 1
+                    // 이 상태에서 다음 클록 상승 에지에
+                    // Plant Model이 현재 명령을 적용
                     state <= CHECK;
                 end
 
+                // 5. 갱신된 Plant 상태로 성공/실패 판정
                 CHECK: begin
-                    // Plant 갱신 결과를 Failure Detector로 확인
 
                     if (is_failed) begin
-                        // 실패 코드가 유효하지 않으면 오류 코드 7 저장
-                        if (fail_code >= 3'd1 &&
-                            fail_code <= 3'd4)
-                            pending_fail_code <= fail_code;
-                        else
-                            pending_fail_code <= 3'd7;
+                        // Failure Detector에서 전달받은
+                        // 실패 코드가 유효한지 확인
+                        case (fail_code)
 
+                            FAIL_SUFFOCATION,
+                            FAIL_BLACKOUT,
+                            FAIL_OVERHEAT,
+                            FAIL_ISOLATION,
+                            FAIL_INVALID: begin
+                                pending_fail_code <= fail_code;
+                            end
+
+                            default: begin
+                                // 정의되지 않은 실패 코드
+                                pending_fail_code <= FAIL_INVALID;
+                            end
+
+                        endcase
+
+                        // 실패 기록 저장 단계로 이동
                         state <= SAVE;
                     end
 
                     else if (time_step == 3'd7) begin
+
                         // 마지막 시간 단계에서 성공 여부 확인
                         if (is_success) begin
                             terminal_success <= 1'b1;
                             state <= FINISH;
                         end
+
                         else begin
-                            // 마지막 시간인데 성공도 실패도 아니면
-                            // 판정기 인터페이스 오류로 처리
-                            pending_fail_code <= 3'd7;
+                            // 마지막 시간에 성공/실패 판정이
+                            // 모두 없는 비정상 상황
+                            pending_fail_code <= FAIL_INVALID;
                             state <= SAVE;
                         end
                     end
@@ -160,11 +188,16 @@ module time_fsm #(
                     end
                 end
 
+                // 6. 실패 정보 저장 및 다음 루프 준비
                 SAVE: begin
-                    // 현재 루프의 실패 정보를 저장한 후 진행
+
+                    // 이 상태에서 failure_save = 1
+                    // Loop Memory는 실패 정보 저장
+                    // Parameter Updater는 제어 파라미터 갱신
 
                     if (loop_count >= MAX_LOOPS) begin
-                        // 최대 반복 횟수 도달: 최종 실패
+                        // 최대 루프 횟수 도달
+                        // 최종 실패 처리
                         terminal_success <= 1'b0;
                         state <= FINISH;
                     end
@@ -177,14 +210,16 @@ module time_fsm #(
                     end
                 end
 
+                // 7. 다음 시간 단계로 진행
                 ADVANCE: begin
-                    // 다음 시간 단계로 진행
                     time_step <= time_step + 1'b1;
                     state <= WAIT_TICK;
                 end
 
+                // 8. 전체 시뮬레이션 종료
                 FINISH: begin
-                    // START를 다시 누르면 새로운 실행 시작
+
+                    // START를 다시 누르면 새로운 시뮬레이션 시작
                     if (start) begin
                         loop_count <= 4'd1;
                         time_step <= 3'd0;
@@ -194,8 +229,8 @@ module time_fsm #(
                     end
                 end
 
+                // 정의되지 않은 상태 처리
                 default: begin
-                    // 정의되지 않은 FSM 상태는 IDLE로 복귀
                     state <= IDLE;
                 end
 
