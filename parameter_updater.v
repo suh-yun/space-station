@@ -23,8 +23,8 @@ module parameter_updater (
                 3'd1: begin // 1번: 질식 발생 (FAIL_SUFFOCATION) -> 목표 산소량 상향
                     if (o_ref < 4'd15) o_ref <= o_ref + 1'b1;
                 end
-                3'd2: begin // 2번: 정전 발생 (FAIL_BLACKOUT) -> 안전 전력 기준 상향
-                    p_safe <= p_safe + 1'b1;
+                3'd2: begin 
+                    if (p_safe < 5'd31) p_safe <= p_safe + 1'b1; 
                 end
                 3'd3: begin // 3번: 과열 발생 (FAIL_OVERHEAT) -> 냉각 기준 온도 하향
                     if (h_safe > 4'd1) h_safe <= h_safe - 1'b1;
